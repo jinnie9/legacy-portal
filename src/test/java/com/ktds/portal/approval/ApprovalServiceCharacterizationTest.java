@@ -60,7 +60,7 @@ class ApprovalServiceCharacterizationTest {
         approvalService.processApproval(approval.getId(), 결재자_팀장_id, 2, "");   // 승인
 
         Approval 결과 = approvalRepository.findById(approval.getId()).orElseThrow();
-        assertThat(결과.getStatus()).isEqualTo(2);
+        assertThat(결과.getStatus()).isEqualTo(ApprovalStatus.APPROVED);
         assertThat(결과.getPriority()).isEqualTo(3); // 지출 + 100만원 이상 → 상신 시 자동 상향(observed)
     }
 
@@ -74,7 +74,7 @@ class ApprovalServiceCharacterizationTest {
         approvalService.processApproval(approval.getId(), 결재자_팀장_id, 3, "예산 부족");
 
         Approval 결과 = approvalRepository.findById(approval.getId()).orElseThrow();
-        assertThat(결과.getStatus()).isEqualTo(3);
+        assertThat(결과.getStatus()).isEqualTo(ApprovalStatus.REJECTED);
         assertThat(결과.getRejectReason()).isEqualTo("예산 부족");
     }
 
@@ -87,7 +87,7 @@ class ApprovalServiceCharacterizationTest {
         approvalService.processApproval(approval.getId(), 기안자_사원_id, 9, "");   // 임시저장(0) 상태에서 취소
 
         Approval 결과 = approvalRepository.findById(approval.getId()).orElseThrow();
-        assertThat(결과.getStatus()).isEqualTo(9);
+        assertThat(결과.getStatus()).isEqualTo(ApprovalStatus.CANCELED);
     }
 
     @Test
@@ -100,7 +100,7 @@ class ApprovalServiceCharacterizationTest {
         approvalService.processApproval(approval.getId(), 결재자_사원_id, 2, "");        // role=1이 승인 시도
 
         Approval 결과 = approvalRepository.findById(approval.getId()).orElseThrow();
-        assertThat(결과.getStatus()).isEqualTo(1); // 승인되지 않고 상신 그대로(조용한 무시)
+        assertThat(결과.getStatus()).isEqualTo(ApprovalStatus.SUBMITTED); // 승인되지 않고 상신 그대로(조용한 무시)
     }
 
     @Test
@@ -121,9 +121,9 @@ class ApprovalServiceCharacterizationTest {
 
         approvalService.processApproval(approval.getId(), 기안자_사원_id, 1, "");   // 상신
         approvalService.processApproval(approval.getId(), 결재자_팀장_id, 2, "");   // 승인
-        approvalService.processApproval(approval.getId(), 결재자_팀장_id, 2, "");   // 재승인 시도(s==1 조건 불충족)
+        approvalService.processApproval(approval.getId(), 결재자_팀장_id, 2, "");   // 재승인 시도(status==SUBMITTED 조건 불충족)
 
         Approval 결과 = approvalRepository.findById(approval.getId()).orElseThrow();
-        assertThat(결과.getStatus()).isEqualTo(2); // 승인 상태 그대로, 두 번째 승인 시도는 무시됨
+        assertThat(결과.getStatus()).isEqualTo(ApprovalStatus.APPROVED); // 승인 상태 그대로, 두 번째 승인 시도는 무시됨
     }
 }

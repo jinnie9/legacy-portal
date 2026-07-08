@@ -7,10 +7,11 @@ import java.time.LocalDateTime;
  * 결재 엔티티.
  *
  * [스멜] 빈약한 도메인 모델(Anemic Domain Model) — 데이터만 있고 행위가 없다.
- * [스멜] 원시 타입 집착(Primitive Obsession) — status, type, priority 가 모두 int.
- *        status: 0=임시저장, 1=상신, 2=승인, 3=반려, 9=취소  (의미가 코드 곳곳에 흩어짐)
+ * [스멜] 원시 타입 집착(Primitive Obsession) — type, priority 는 아직 int (enum 후보로 남아 있음).
  *        type:   1=지출, 2=휴가, 3=구매, 4=기타
  *        priority: 1=낮음, 2=보통, 3=높음
+ * [리팩토링] status 는 int → {@link ApprovalStatus} enum 으로 전환했다(Primitive Obsession 제거).
+ *        DB 컬럼은 여전히 정수(0/1/2/3/9) 그대로 — {@link ApprovalStatusConverter} 참고.
  * [스멜] 캡슐화 부재 — 모든 필드에 public setter. 누구나 상태를 마음대로 바꿀 수 있다.
  */
 @Entity
@@ -23,7 +24,9 @@ public class Approval {
     private String title;
     private String content;
     private int type;       // 1=지출 2=휴가 3=구매 4=기타 (의미를 주석으로만 설명 → enum 후보)
-    private int status;     // 0=임시저장 1=상신 2=승인 3=반려 9=취소 (숫자만 저장 → 의미 증발)
+    @Convert(converter = ApprovalStatusConverter.class)
+    @Column(nullable = false)
+    private ApprovalStatus status;   // DB엔 0/1/2/3/9 정수 그대로 저장(컨버터가 매핑) — 레거시 저장값 불변
     private int priority;   // 1=낮음 2=보통 3=높음
     private Long drafterId;     // 기안자
     private Long approverId;    // 결재자
@@ -40,8 +43,8 @@ public class Approval {
     public void setContent(String content) { this.content = content; }
     public int getType() { return type; }
     public void setType(int type) { this.type = type; }
-    public int getStatus() { return status; }
-    public void setStatus(int status) { this.status = status; }
+    public ApprovalStatus getStatus() { return status; }
+    public void setStatus(ApprovalStatus status) { this.status = status; }
     public int getPriority() { return priority; }
     public void setPriority(int priority) { this.priority = priority; }
     public Long getDrafterId() { return drafterId; }
