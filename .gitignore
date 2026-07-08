@@ -3,3 +3,4 @@ target/
 .idea/
 *.log
 .tmp/
+.claude/settings.local.json
