@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 /**
  * 사용자 엔티티.
  * [스멜] role 이 int. 1=사원, 2=팀장, 3=임원 — 의미가 코드 곳곳에 매직넘버로 흩어진다.
+ * [리팩토링] role>=2("팀장 이상") 권한 판정을 {@link #isManagerOrAbove()}로 이동(Rich Domain).
+ *   ApprovalService.processApproval()의 승인·반려 분기에 있던 중복 판정을 여기로 모았다.
+ *   role 필드 자체는 아직 int 그대로 — NoticeService 등 다른 곳의 동일 판정은 이번 범위 밖(추후 정리 대상).
  */
 @Entity
 @Table(name = "users")
@@ -38,4 +41,8 @@ public class User {
     public void setRole(int role) { this.role = role; }
     public String getDept() { return dept; }
     public void setDept(String dept) { this.dept = dept; }
+
+    public boolean isManagerOrAbove() {
+        return role >= 2;   // role: 1=사원·2=팀장·3=임원
+    }
 }
