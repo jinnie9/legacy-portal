@@ -124,7 +124,9 @@ public class ApprovalService {
             case APPROVE -> approve(approval, actor, userId);
             case REJECT -> reject(approval, actor, userId, reason);
             case CANCEL -> cancel(approval, userId);
-            case null -> { } // 알 수 없는 action → 조용히 무시(레거시 동작 보존)
+            case null -> {
+                // 알 수 없는 action → 조용히 무시(레거시 동작 보존)
+            }
         }
     }
 
