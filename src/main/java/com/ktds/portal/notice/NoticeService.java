@@ -7,12 +7,12 @@ import com.ktds.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * 공지 서비스.
- * [스멜4 핵심] ApprovalService 와 거의 동일한 "감사 로그/메일 본문" 로직이 또 복붙되어 있다.
- *             → Day2 '중복 코드 제거 자동화 (공통 모듈 추출)' 실습의 주재료.
+ * [스멜4 핵심] (감사 로그 부분 해결) ApprovalService 와 거의 동일했던 "감사 로그" 조립 로직은
+ *             AuditLogger.write(action, id, userId)로 이동(docs/4-21 "동일 중복" #1). 메일 본문 템플릿은
+ *             여전히 여기 있다(유사 중복, 추후 과제).
  * [스멜5] (해결) 역시 협력 객체를 직접 new 하던 강결합 — ApprovalService와 동일하게
  *         {@link MailSender}/{@link AuditLogger} 인터페이스 + 생성자 주입으로 전환(docs/4-9 강결합 탐지 참고).
  */
@@ -42,9 +42,8 @@ public class NoticeService {
         n.setCreatedAt(LocalDateTime.now());
         repo.save(n);
 
-        // [스멜4] ApprovalService.create() 와 사실상 동일한 감사 로그 코드(복붙).
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        audit.write("[" + now + "] NOTICE CREATE id=" + n.getId() + " by=" + writerId);
+        // [리팩토링] 타임스탬프 포맷팅 + 문자열 조립은 AuditLogger 구현체 책임(docs/4-21 "동일 중복" #1 해소).
+        audit.write("NOTICE CREATE", n.getId(), writerId);
         return n;
     }
 
@@ -68,8 +67,7 @@ public class NoticeService {
                         mail.send(member.getEmail(), "[긴급공지] " + n.getTitle(), body);
                     }
                 }
-                String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                audit.write("[" + now + "] NOTICE PUBLISH id=" + n.getId() + " by=" + userId);
+                audit.write("NOTICE PUBLISH", n.getId(), userId);
             }
         }
     }

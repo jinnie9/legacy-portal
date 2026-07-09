@@ -664,3 +664,82 @@ approvalService = new ApprovalService(approvalRepository, userRepository, mailSe
 **검증**
 - `mvnw.cmd -q test -Dtest=ApprovalServiceMailNotificationTest`로 새 테스트 5개만 실행 — 전부 green(기존 `ApprovalServiceCharacterizationTest`는 이번 지시대로 건드리지 않았고 별도로 실행하지도 않음).
 - `git status`로 `ApprovalServiceCharacterizationTest.java`가 이번 변경에 포함되지 않았음을 확인.
+
+## 2026-07-09 15:2x — AuditLogger.write(action, id, userId) Move Method + 메일 발송 위임 재확인
+
+**배경**: docs/4-21 표의 "동일 중복" #1 — 감사 로그 타임스탬프 포맷팅 + `[시각] EVENT id=X by=Y` 문자열 조립이 `ApprovalService`(`create()`/`writeAudit()`)·`NoticeService`(`create()`/`publish()`)·`ScheduleService`(`create()`/`confirm()`) 6곳에 `DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")` 리터럴까지 완전히 동일하게 복붙되어 있었다. `AuditLogger` 인터페이스 시그니처를 좁혀 이 조립 책임 자체를 구현체로 옮겼다.
+
+**1) AuditLogger — write(String line) → write(action, id, userId)**
+
+**변경 전**
+```java
+public interface AuditLogger {
+    void write(String line);
+}
+```
+
+**변경 후**
+```java
+public interface AuditLogger {
+    void write(String action, Long id, Long userId);
+}
+```
+
+**2) ConsoleAuditLogger — 타임스탬프 포맷팅 + 문자열 조립을 구현체 안으로**
+
+**변경 전**
+```java
+@Override
+public void write(String line) {
+    System.out.println("[AUDIT] " + line);
+}
+```
+
+**변경 후**
+```java
+private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+@Override
+public void write(String action, Long id, Long userId) {
+    String now = LocalDateTime.now().format(TIMESTAMP_FORMAT);
+    System.out.println("[AUDIT] [" + now + "] " + action + " id=" + id + " by=" + userId);
+}
+```
+
+콘솔에 최종 출력되는 문자열 형식(`[AUDIT] [시각] ACTION id=X by=Y`)은 기존과 동일 — 조립 위치만 옮겼다.
+
+**3) 호출부 — 세 서비스 모두 `audit.write(action, id, userId)`만 호출**
+
+`ApprovalService`는 각 서비스가 직접 `DateTimeFormatter`로 문자열을 조립해 넘기던 방식에서, 이벤트 이름·id·userId만 넘기는 방식으로 바뀌었다. 예(`NoticeService.create()`):
+
+**변경 전**
+```java
+String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+audit.write("[" + now + "] NOTICE CREATE id=" + n.getId() + " by=" + writerId);
+```
+
+**변경 후**
+```java
+audit.write("NOTICE CREATE", n.getId(), writerId);
+```
+
+`ScheduleService.create()/confirm()`도 동일한 패턴으로 교체. `ApprovalService`는 추가로 `writeAudit()` private 래퍼(타임스탬프 조립만 하던 메서드)가 더 이상 필요 없어져 삭제하고, `submit/approve/reject/cancel`이 `audit.write(...)`를 직접 호출하도록 정리했다.
+
+**4) create()의 예외 케이스 — "type=" 필드**
+
+`ApprovalService.create()`의 원래 감사 로그만 유일하게 `type=` 필드가 하나 더 있었다(`"... id=X by=Y type=Z"`). 3-매개변수 시그니처로는 이 추가 필드를 그대로 끝에 붙일 수 없어, `action` 문자열에 실어 보존했다:
+
+```java
+audit.write("APPROVAL CREATE type=" + approval.getType(), approval.getId(), drafterId);
+```
+
+출력 결과: `[AUDIT] [시각] APPROVAL CREATE type=1 id=5 by=3` — 원래는 `id=5 by=3 type=1` 순서였던 것이 `type=1 id=5 by=3` 순서로 바뀐다. **정보량과 id/by 값은 완전히 동일하고, 필드 순서만 바뀌는 이 콘솔 로그 한 줄이 유일한 겉보기 변화**다. DB 저장값·API 응답·상태 전이 등 CLAUDE.md가 규정한 불변 규칙 대상은 전혀 건드리지 않았다.
+
+**5) 메일 발송 위임 — 이미 완료 상태였음을 재확인**
+
+"메일 발송은 MailSender/ConsoleMailSender로 위임"은 별도 변경 없이 이미 만족되어 있었다 — `ApprovalService`/`NoticeService`의 모든 메일 발송은 이미 생성자로 주입된 `mail.send(...)`(인터페이스 호출)로만 이루어지고, `System.out.println`으로 직접 메일을 찍는 코드는 `ConsoleMailSender` 내부에만 있다(grep으로 전수 확인). 이번 커밋에서 메일 관련 코드 변경은 없다.
+
+**검증**
+- `mvnw.cmd -q test-compile`로 컴파일 확인.
+- `mvnw.cmd -q test -Dtest=ApprovalServiceCharacterizationTest,ApprovalServiceMailNotificationTest` 실행 — 기존 특성화 테스트 6개 + 메일 알림 테스트 5개 **전부 green**(exit code 0). 콘솔 로그에서 `[AUDIT] [시각] APPROVAL CREATE type=1 id=2 by=7` 형태로 새 포맷이 정상 출력됨을 확인.
+- docs/4-21의 "동일 중복 #1" 행에 해소 표시 추가.

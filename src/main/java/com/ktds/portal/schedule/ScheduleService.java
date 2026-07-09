@@ -6,11 +6,11 @@ import com.ktds.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
  * 일정 서비스.
- * [스멜4] 감사 로그 코드가 또 복붙. [스멜] 시간 겹침(중복 예약) 검증이 길고 읽기 어렵다.
+ * [스멜4] (해결) 감사 로그 조립 코드 복붙 — AuditLogger.write(action, id, userId)로 이동(docs/4-21 "동일 중복" #1).
+ * [스멜] 시간 겹침(중복 예약) 검증이 길고 읽기 어렵다.
  * [스멜5] (해결) 협력 객체 직접 new — {@link AuditLogger} 인터페이스 + 생성자 주입으로 전환
  *         (docs/4-9 강결합 탐지 참고). ScheduleService는 메일을 보내지 않아 MailSender 의존은 없다.
  */
@@ -61,9 +61,8 @@ public class ScheduleService {
         sc.setStatus(0);   // status(상태): 0 예정·1 확정·9 취소  [0=예정, 확정 전]
         repo.save(sc);
 
-        // [스멜4] 또 복붙된 감사 로그.
-        String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        audit.write("[" + now + "] SCHEDULE CREATE id=" + sc.getId() + " by=" + ownerId);
+        // [리팩토링] 타임스탬프 포맷팅 + 문자열 조립은 AuditLogger 구현체 책임(docs/4-21 "동일 중복" #1 해소).
+        audit.write("SCHEDULE CREATE", sc.getId(), ownerId);
         return sc;
     }
 
@@ -76,8 +75,7 @@ public class ScheduleService {
             if (sc.getStatus() == 0) {          // status==0 → 예정 상태일 때만
                 sc.setStatus(1);   // 1 = 확정 (CONFIRMED)
                 repo.save(sc);
-                String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                audit.write("[" + now + "] SCHEDULE CONFIRM id=" + sc.getId() + " by=" + userId);
+                audit.write("SCHEDULE CONFIRM", sc.getId(), userId);
             }
         }
     }
