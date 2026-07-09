@@ -1,6 +1,6 @@
 package com.ktds.portal.schedule;
 
-import com.ktds.portal.common.FileAuditLogger;
+import com.ktds.portal.common.AuditLogger;
 import com.ktds.portal.user.User;
 import com.ktds.portal.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -11,17 +11,20 @@ import java.time.format.DateTimeFormatter;
 /**
  * 일정 서비스.
  * [스멜4] 감사 로그 코드가 또 복붙. [스멜] 시간 겹침(중복 예약) 검증이 길고 읽기 어렵다.
+ * [스멜5] (해결) 협력 객체 직접 new — {@link AuditLogger} 인터페이스 + 생성자 주입으로 전환
+ *         (docs/4-9 강결합 탐지 참고). ScheduleService는 메일을 보내지 않아 MailSender 의존은 없다.
  */
 @Service
 public class ScheduleService {
 
     private final ScheduleRepository repo;
     private final UserRepository userRepo;
-    private final FileAuditLogger audit = new FileAuditLogger();
+    private final AuditLogger audit;
 
-    public ScheduleService(ScheduleRepository repo, UserRepository userRepo) {
+    public ScheduleService(ScheduleRepository repo, UserRepository userRepo, AuditLogger audit) {
         this.repo = repo;
         this.userRepo = userRepo;
+        this.audit = audit;
     }
 
     public Schedule create(String title, Long ownerId, LocalDateTime startAt,

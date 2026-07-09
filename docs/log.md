@@ -523,3 +523,144 @@ private void approve(Approval approval, User actor, Long userId) {
 **검증**
 - `mvnw.cmd -q test-compile`로 컴파일만 확인(테스트 스위트 미실행).
 - 앱 재기동 후 실제 API로 전체 수명주기 확인: 생성(`status=0`) → 상신(`status=1`, 200만원 지출 우선순위 2→3 자동상향) → 권한없는 사용자(id=4) 승인 시도(`HTTP 200`, 무변화) → 정상 승인(id=2, `status=2`) → 별도 건으로 반려(`status=3`, `rejectReason` 저장) → 별도 건으로 취소(`status=9`) — 전부 리팩토링 전과 동일.
+
+## 2026-07-09 14:3x — SmtpMailSender/FileAuditLogger 개명 + NoticeService/ScheduleService 강결합 해소
+
+**배경**: docs/4-9(강결합 탐지)가 지적한 "협력 객체 직접 new" 스멜은 `ApprovalService`만 먼저 해소했고, `NoticeService`(mail·audit 2곳)·`ScheduleService`(audit 1곳)는 그대로 `new SmtpMailSender()`/`new FileAuditLogger()`를 쓰고 있었다. 동시에 두 구현체 이름(`Smtp`/`File`)이 실제 동작(콘솔 출력)과 맞지 않는 `Poor Naming`이기도 했다.
+
+**1) 구현체 개명 — 실제 동작과 이름을 일치**
+
+`git mv`로 이력을 보존하며 이름만 교체(인터페이스 `MailSender`/`AuditLogger`, DB 저장값, API 계약은 무관 — 순수 내부 구현 클래스명 변경):
+- `common/SmtpMailSender.java` → `common/ConsoleMailSender.java` (클래스명도 동일하게 변경)
+- `common/FileAuditLogger.java` → `common/ConsoleAuditLogger.java`
+
+**변경 전**
+```java
+/** ... 실습에서는 실제 SMTP 대신 콘솔에 출력만 한다. */
+@Component
+public class SmtpMailSender implements MailSender {
+    public void send(String to, String subject, String body) {
+        // 실제로는 JavaMailSender 등을 사용. 실습용으로 콘솔 출력.
+        ...
+    }
+}
+```
+
+**변경 후**
+```java
+/** ... [리팩토링] 이름 개선: SmtpMailSender → ConsoleMailSender. 실제로는 SMTP를 전혀 쓰지 않고
+ *  콘솔에 출력만 하므로, 실제 동작과 일치하는 이름으로 교체(Poor Naming 방지). */
+@Component
+public class ConsoleMailSender implements MailSender {
+    public void send(String to, String subject, String body) {
+        // 실제 서비스라면 JavaMailSender 등을 사용하겠지만, 이 실습에서는 콘솔 출력이 곧 실제 동작이다.
+        ...
+    }
+}
+```
+
+`FileAuditLogger`→`ConsoleAuditLogger`도 동일한 패턴. `MailSender`/`AuditLogger` 인터페이스의 `{@link}` Javadoc도 새 이름을 가리키도록 함께 수정.
+
+**2) NoticeService — 협력 객체 직접 new 제거, 생성자 주입으로 전환**
+
+**변경 전**
+```java
+private final SmtpMailSender mail = new SmtpMailSender();
+private final FileAuditLogger audit = new FileAuditLogger();
+
+public NoticeService(NoticeRepository repo, UserRepository userRepo) {
+    this.repo = repo;
+    this.userRepo = userRepo;
+}
+```
+
+**변경 후**
+```java
+private final MailSender mail;
+private final AuditLogger audit;
+
+public NoticeService(NoticeRepository repo, UserRepository userRepo, MailSender mail, AuditLogger audit) {
+    this.repo = repo;
+    this.userRepo = userRepo;
+    this.mail = mail;
+    this.audit = audit;
+}
+```
+
+**3) ScheduleService — audit 협력 객체 직접 new 제거**
+
+`ScheduleService`는 메일을 보내지 않아 `MailSender` 의존은 없음(원래부터 `mail` 필드 자체가 없었다 — docs/4-9 참고).
+
+**변경 전**
+```java
+private final FileAuditLogger audit = new FileAuditLogger();
+
+public ScheduleService(ScheduleRepository repo, UserRepository userRepo) {
+    this.repo = repo;
+    this.userRepo = userRepo;
+}
+```
+
+**변경 후**
+```java
+private final AuditLogger audit;
+
+public ScheduleService(ScheduleRepository repo, UserRepository userRepo, AuditLogger audit) {
+    this.repo = repo;
+    this.userRepo = userRepo;
+    this.audit = audit;
+}
+```
+
+**부수 조치**: `ApprovalServiceCharacterizationTest`의 `@Import`를 `ConsoleMailSender`/`ConsoleAuditLogger`로 갱신(클래스명 변경 반영, import만 맞춤 — 테스트는 실행하지 않음). `NoticeController`/`ScheduleController`는 애초에 존재하지 않아(컨트롤러 미구현) 생성자 시그니처 변경으로 인한 다른 호출부 수정은 불필요 — Spring 컨테이너가 `@Component`로 등록된 `ConsoleMailSender`/`ConsoleAuditLogger`를 자동으로 주입한다.
+
+**검증**
+- `mvnw.cmd -q test-compile`로 컴파일만 확인(테스트 스위트 미실행).
+- 앱 재기동 후 `/api/users` 200 확인으로 `NoticeService`/`ScheduleService`를 포함한 전체 Spring 컨텍스트가 새 생성자 시그니처로 정상 기동함을 확인(컨텍스트가 못 뜨면 이 호출도 실패했을 것).
+- `/api/approvals` 전체 수명주기(생성→상신→승인) 재실행 후 콘솔 로그에서 `[AUDIT] ... APPROVAL CREATE/SUBMIT/APPROVE`와 `=== MAIL ===` 출력이 그대로 찍히는 것을 확인 — `ConsoleMailSender`/`ConsoleAuditLogger`가 정상 동작.
+
+## 2026-07-09 15:0x — FakeMailSender 기반 메일 발송 단위 테스트 추가
+
+**배경**: `ApprovalService`가 상신/승인/반려 시 `mail.send(...)`를 올바른 인자로 호출하는지 검증하는 테스트가 없었다. `ApprovalServiceCharacterizationTest`(안전망)는 `@DataJpaTest`로 DB 상태 전이만 확인할 뿐 메일 호출 자체는 검증하지 않는다. 기존 특성화 테스트는 건드리지 않고, 새 파일로 메일 협력만 좁게 검증하는 단위 테스트를 추가했다.
+
+**1) `FakeMailSender` — 실 발송 없이 호출만 기록하는 테스트 더블**
+
+```java
+// src/test/java/com/ktds/portal/common/FakeMailSender.java
+public class FakeMailSender implements MailSender {
+    public record SentMail(String to, String subject, String body) {}
+    private final List<SentMail> sentMails = new ArrayList<>();
+
+    @Override
+    public void send(String to, String subject, String body) {
+        sentMails.add(new SentMail(to, subject, body));
+    }
+
+    public List<SentMail> sentMails() { return sentMails; }
+}
+```
+
+`ConsoleMailSender`(콘솔 출력)조차 실행하지 않고 인자만 리스트에 담아두므로, 테스트는 "무엇을 보내려 했는가"만 어서션한다.
+
+**2) `ApprovalServiceMailNotificationTest` — Mockito 순수 목 + FakeMailSender 조합**
+
+`@DataJpaTest`(Spring 컨텍스트) 대신 `ApprovalRepository`/`UserRepository`/`AuditLogger`를 Mockito `mock()`으로, `MailSender`만 `FakeMailSender`로 교체해 `new ApprovalService(...)`를 직접 생성 — 컨텍스트 기동 없이 빠르게 동작한다.
+
+```java
+approvalRepository = mock(ApprovalRepository.class);
+userRepository = mock(UserRepository.class);
+mailSender = new FakeMailSender();
+AuditLogger auditLogger = mock(AuditLogger.class);
+approvalService = new ApprovalService(approvalRepository, userRepository, mailSender, auditLogger);
+```
+
+5개 테스트로 다음을 검증한다:
+- 상신 → 결재자에게 `[결재요청]` 메일 발송
+- 승인 → 기안자에게 `[결재승인]` 메일 발송
+- 반려 → 기안자에게 `[결재반려]` 메일 발송(본문에 사유 포함)
+- 권한 없는(사원) 결재자의 승인 시도 → 메일 미발송(도메인 메서드가 `false` 반환 → 서비스가 저장·메일·감사로그를 스킵)
+- 취소 → 원래 메일 발송 로직 자체가 없는 설계이므로 미발송
+
+**검증**
+- `mvnw.cmd -q test -Dtest=ApprovalServiceMailNotificationTest`로 새 테스트 5개만 실행 — 전부 green(기존 `ApprovalServiceCharacterizationTest`는 이번 지시대로 건드리지 않았고 별도로 실행하지도 않음).
+- `git status`로 `ApprovalServiceCharacterizationTest.java`가 이번 변경에 포함되지 않았음을 확인.

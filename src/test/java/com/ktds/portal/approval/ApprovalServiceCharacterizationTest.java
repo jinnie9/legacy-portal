@@ -4,8 +4,8 @@ import com.ktds.portal.approval.domain.Approval;
 import com.ktds.portal.approval.domain.ApprovalStatus;
 import com.ktds.portal.approval.repository.ApprovalRepository;
 import com.ktds.portal.approval.service.ApprovalService;
-import com.ktds.portal.common.FileAuditLogger;
-import com.ktds.portal.common.SmtpMailSender;
+import com.ktds.portal.common.ConsoleAuditLogger;
+import com.ktds.portal.common.ConsoleMailSender;
 import com.ktds.portal.user.User;
 import com.ktds.portal.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,13 +29,14 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * @DataJpaTest + @Import(...): 서비스를 직접 new 하지 않고, 슬라이스 테스트 컨텍스트에 명시적으로
  * 끌어들여 실제 ApprovalRepository/UserRepository 빈을 생성자로 주입받게 한다. ApprovalService가
  * MailSender/AuditLogger도 생성자로 받게 되면서(강결합 해소), @DataJpaTest 슬라이스가 자동으로 스캔하지
- * 않는 SmtpMailSender/FileAuditLogger(@Component)도 함께 @Import해야 컨텍스트가 정상적으로 뜬다.
+ * 않는 ConsoleMailSender/ConsoleAuditLogger(@Component, 구 SmtpMailSender/FileAuditLogger)도 함께
+ * @Import해야 컨텍스트가 정상적으로 뜬다.
  * @AutoConfigureTestDatabase(Replace.NONE): src/test/resources/application.properties 의 H2(MODE=LEGACY)
  * 설정을 그대로 쓴다 — @DataJpaTest 기본값(Replace.ANY)이 임의의 임베디드 DB로 바꿔치기하는 것을 막는다.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ApprovalService.class, SmtpMailSender.class, FileAuditLogger.class})
+@Import({ApprovalService.class, ConsoleMailSender.class, ConsoleAuditLogger.class})
 class ApprovalServiceCharacterizationTest {
 
     @Autowired

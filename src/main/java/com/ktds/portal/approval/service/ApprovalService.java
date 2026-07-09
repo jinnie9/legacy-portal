@@ -28,7 +28,7 @@ import java.util.List;
  *                            status/action/role>=2/금액 임계값 매직넘버는 enum·상수·도메인 메서드로 정리 완료.
  *  4. Duplicated Code      : 메일 본문 생성/감사 로그 기록이 메서드마다 복붙 되어 있다(위치만 옮겼을 뿐 중복은 남음).
  *  5. Tight Coupling       : (해결) MailSender/AuditLogger 인터페이스 + 생성자 주입으로 전환.
- *                            new SmtpMailSender()/new FileAuditLogger() 직접 생성 제거.
+ *                            new ConsoleMailSender()/new ConsoleAuditLogger() 직접 생성 제거.
  *  6. Feature Envy         : (해결) amountGrade()는 AmountGrade enum으로, submit/approve/reject/cancel의
  *                            상태·권한 판정은 Approval 도메인 메서드로 이동 — 서비스가 더 이상 Approval의
  *                            필드를 꺼내 직접 규칙을 계산하지 않는다.
