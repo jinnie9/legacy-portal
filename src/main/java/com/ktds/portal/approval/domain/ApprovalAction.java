@@ -1,4 +1,4 @@
-package com.ktds.portal.approval;
+package com.ktds.portal.approval.domain;
 
 /**
  * [리팩토링] processApproval()의 action 파라미터(int: 1/2/3/9) 매직넘버를 enum으로 전환.

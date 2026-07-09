@@ -1,5 +1,6 @@
-package com.ktds.portal.approval;
+package com.ktds.portal.approval.repository;
 
+import com.ktds.portal.approval.domain.Approval;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 

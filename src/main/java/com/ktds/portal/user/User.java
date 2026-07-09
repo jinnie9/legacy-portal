@@ -1,5 +1,6 @@
 package com.ktds.portal.user;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 /**
@@ -42,6 +43,9 @@ public class User {
     public String getDept() { return dept; }
     public void setDept(String dept) { this.dept = dept; }
 
+    // [리팩토링 유의] Jackson은 isXxx() 메서드를 bean getter로 인식해 "managerOrAbove" 필드를
+    // 자동으로 JSON에 노출시킨다 — /api/users 응답 형식이 바뀌는 것(불변 규칙 위반)이므로 @JsonIgnore로 막는다.
+    @JsonIgnore
     public boolean isManagerOrAbove() {
         return role >= 2;   // role: 1=사원·2=팀장·3=임원
     }

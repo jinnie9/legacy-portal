@@ -1,4 +1,4 @@
-package com.ktds.portal.approval;
+package com.ktds.portal.approval.domain;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
